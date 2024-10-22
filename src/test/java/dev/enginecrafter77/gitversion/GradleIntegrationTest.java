@@ -80,10 +80,10 @@ public class GradleIntegrationTest {
 		return this.git.tag().setAnnotated(true).setName(tagName).setMessage(tagName).call();
 	}
 
-	public void commitProject() throws GitAPIException
+	public RevCommit commitProject() throws GitAPIException
 	{
 		this.git.add().addFilepattern(".").call();
-		this.git.commit().setMessage("Initial commit").call();
+		return this.git.commit().setMessage("Initial commit").call();
 	}
 
 	public RevCommit makeCommit() throws IOException, GitAPIException

@@ -134,4 +134,36 @@ public class PluginIntegrationTest extends GradleIntegrationTest {
 		BuildResult result = runner.build();
 		Assertions.assertEquals("EARLY(0.0.1)\n0.0.1", result.getOutput().trim());
 	}
+
+	@Test
+	public void testNoTags() throws Exception
+	{
+		this.installBuildFile("simple.build.gradle");
+
+		String commitId = this.commitProject().abbreviate(7).name();
+
+		GradleRunner runner = GradleRunner.create();
+		runner.withEnvironment(System.getenv());
+		runner.forwardOutput();
+		runner.withPluginClasspath();
+		runner.withProjectDir(projectDir);
+		runner.withArguments("--quiet", "--stacktrace", "version");
+		BuildResult result = runner.build();
+		Assertions.assertEquals("0.0.0-1-g" + commitId, result.getOutput().trim());
+	}
+
+	@Test
+	public void testNoCommits() throws Exception
+	{
+		this.installBuildFile("simple.build.gradle");
+
+		GradleRunner runner = GradleRunner.create();
+		runner.withEnvironment(System.getenv());
+		runner.forwardOutput();
+		runner.withPluginClasspath();
+		runner.withProjectDir(projectDir);
+		runner.withArguments("--quiet", "--stacktrace", "version");
+		BuildResult result = runner.build();
+		Assertions.assertEquals("0.0.0", result.getOutput().trim());
+	}
 }

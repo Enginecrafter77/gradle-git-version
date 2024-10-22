@@ -1,0 +1,14 @@
+plugins {
+	id 'java-library'
+	id 'dev.enginecrafter77.gitversion'
+}
+
+java {
+	withSourcesJar()
+}
+
+versioning {
+	format "%M.%m.%p"
+}
+
+println "EARLY(${version})"

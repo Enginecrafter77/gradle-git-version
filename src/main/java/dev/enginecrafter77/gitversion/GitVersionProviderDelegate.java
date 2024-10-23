@@ -4,7 +4,6 @@ import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.Setter;
 import org.gradle.api.provider.Provider;
-import org.jetbrains.annotations.Nullable;
 
 import javax.annotation.Nonnull;
 
@@ -19,10 +18,13 @@ public class GitVersionProviderDelegate extends ProviderDelegate<GitVersion> {
 	@Override
 	public String toString()
 	{
-		@Nullable GitVersion provided = this.provider.getOrNull();
-		if(provided == null)
-			return "null";
-		return this.formatter.getOrElse(DefaultGitVersionFormatter.get()).format(provided);
+		return this.asString().getOrElse("null");
+	}
+
+	@Nonnull
+	public Provider<String> asString()
+	{
+		return this.provider.map((GitVersion version) -> this.formatter.getOrElse(DefaultGitVersionFormatter.get()).format(version));
 	}
 
 	@Override

@@ -1,11 +1,9 @@
-# Gradle Github Release plugin
+# gitversion
 
 ## Overview
 
-Gradle Github Release plugin does just what its
-name suggests. When invoked from gradle, it creates
-a release on github and uploads the built binaries
-to the release as assets.
+gitversion is a gradle plugin that utilizes the `org.eclipse.jgit` library
+to load Git version info during build, which aims to simplify the project versioning process.
 
 ## Getting Started
 
@@ -33,207 +31,78 @@ build.gradle
 plugins {
 	id "dev.enginecrafter77.gitversion"
 }
-
-github {
-	repository = "https://github.com/user/repo.git"
-	token = "ghb_xxxxxxxxxxxxxxxxxxx"
-	artifacts {
-		from jar
-		from sourcesJar
-	}
-	release {
-		useLatestTag()
-	}
-}
 ```
 
-This configuration will create a release from
-the latest annotated tag in the git repository.
+And that's it! Your version is available from the `project.version` property.
 
-To create the release, run:
+## How it works
 
-```bash
-./gradlew githubRelease
-```
+gitversion makes use of gradle's provider system, which enables lazy evaluation
+of values. In our case, when we access `project.version`, nothing happens yet.
+When we call `project.version.toString()` though, that's when the project's git version
+is determined. Thanks to the jgit library, no external command is being run, and
+thus you don't need git installed locally.
 
-## Customizing release
+## Advanced usage
 
-In the release closure, you can specify the exact
-release information to use.
+### Custom version format
+The default format used is what `git describe --tags` gives, with few minor differences.
+First of all, when there is no tag in the repository, the version is given as `0.0.0` with distnace
+and commit being set appropriately.
 
+One can, however, specify their own format as such:
+
+build.gradle
 ```groovy
-release {
-	tag = "vX.Y.Z" // The tag to create the release on
-	name = "Release XYZ" // The release title, optional, default: same as tag
-	message = "Release message\n\nA new line example" // The release body
-	draft = false // optional, default: false
-	preRelease = false // optional, default: false
+versioning {
+    format "%M.%m.%p%[-{}]d%[-{}]c"
 }
 ```
 
-On the other hand, you can use `useLatestTag()` method.
-This method looks into the git repository located in the root project directory
-to locate the latest annotated git tag. The tag property is set to
-the annotated tag's name, and the tag's message is copied
-into the message property.
+The formatting uses a simple substitutions representing individual components.
 
+The available substitutions:
+ * `%M` for major version
+ * `%m` for minor version
+ * `%p` for patch
+ * `%d` for distance
+ * `%c` for commit
+
+Distance and commit may be, however, ommited from the pattern. Distance will be ommited
+if it equals to 0 and commit if it equals to null (for tags on HEAD).
+
+The variables can have additional patterns attached to them, so that if a variable is not ommited,
+the whole pattern is appended, otherwise nothing at all is appended.
+
+For example, the following pattern: `%[-{}]d` expands to `-1` when distance is 1,
+but expands to empty string when distance is 0. The pattern is delimited by `[]` braces, and
+inside the pattern, the `{}` is replaced by the value of the variable.
+
+Additionally, one may force the pattern to display even if it can be ommited. This is done by adding `!` after the `%`
+sign, as such: `%![-{}]d` will expand to `-1` but also to `-0`.
+
+Moreover, if this is not enough, one may also provide a completely different formatting
+by providing a `dev.enginecrafter77.gitversion.GitVersionFormatter` implementation.
+
+For example, using lambda:
 ```groovy
-release {
-	useLatestTag()
+versioning {
+    format (version -> "${version.major}.${version.minor}.${version.patch}") 
 }
 ```
 
-Additionally, if your git repository is not located
-in the project directory, you can specify it as an
-argument to the useLatestTag method.
+### Accessing the version object
+The git version is stored in an object of type `dev.enginecrafter77.gitversion.GitVersion`.
 
-```groovy
-release {
-	useLatestTag(new File("some-git-dir"))
-}
-```
+This object provides 5 fields:
+ * `major`: The major version
+ * `minor`: The minor version
+ * `patch`: The patch version
+ * `distance`: The distance to the last tag (0 when a tag is on HEAD)
+ * `commit`: An abbreviated commit hash (null when a tag is on HEAD)
 
-## Artifact types
+The `project.version` object acts as a delegate to the provider of `GitVersion` objects.
+Thus, you can use `project.version.get()` to obtain a `GitVersion` instance.
 
-One may wish to publish artifacts other than the main JAR.
-In such cases, artifacts offers a few more options.
-
-The easiest way is using the `from` method. This method takes 1
-task argument. The task should specify exactly 1 output file, which
-will be uploaded as the artifact.
-
-```groovy
-artifacts {
-	from jar
-}
-```
-
-The artifact can be further customized as such:
-
-```groovy
-artifacts {
-	from jar with {
-		name = "artifact-name.jar"
-		label = "some label" // optional
-	}
-}
-```
-
-Or, using the shorthand form:
-
-```groovy
-artifacts {
-	from jar named "artifact-name.jar" labeled "some label"
-}
-```
-
-By default, the artifacts use the filename of
-the file as the name of the uploaded asset. While
-this is desirable in most cases, you can customize
-it for each artifact.
-
-If you want to manually specify an artifact, use the following:
-
-```groovy
-artifacts {
-	artifact {
-		file = (Provider<RegularFile>) provider
-		contentType = "application/octet-stream" // optional
-		name = "file-name.txt" // optional, same as filename if left unset
-		label = "some label" // optional
-	}
-}
-```
-
-Please note that this approach is intented for advanced users who know what
-`Provider<RegularFile>` is. The behavior of this approach is generally unknown.
-
-## Lazy Evaluation
-
-All the closures are evaluated during configure time, and as such
-certain options are not yet known. An example of such case would be
-a project using a plugin which sets `project.version` according to
-the local git repository info in `afterEvaluate` method. Thus, a configuration
-like this probably won't work as expected.
-
-```groovy
-artifacts {
-	from jar named "artifact-name-${project.version}.jar"
-}
-```
-
-To achieve the desired result, use the gradle `Property` system.
-
-```groovy
-def githubArtifactNameProperty = objects.property(String)
-
-afterEvaluate {
-	// project.version is now set
-	githubArtifactNameProperty.set("artifact-name-${project.version}.jar")
-}
-
-github {
-	artifacts {
-		from jar named githubArtifactNameProperty
-	}
-}
-```
-
-## Testing mode
-
-For testing the plugin, a very minimal github api mock
-server was created using Python and Flask. The server
-is implemented in `github-mock-server.py` file.
-
-To run the server, first you need to create a virtual environment.
-
-```bash
-python3 -m venv flask-venv
-source flask-venv/bin/activate
-pip install flask
-```
-
-To exit the virtual environment, run `deactivate` and `source flask-venv/bin/activate` to enter it again.
-
-To actually run the server, run:
-
-```bash
-./github-mock-server.py
-```
-
-The server will be running on `http://localhost:5000`, which is what the plugin expects.
-
-To force the plugin to use the mock server, runi t as such.
-
-```bash
-./gradlew -Ddev.enginecrafter77.githubrelease.endpoint=http://localhost:5000 githubRelease
-```
-
-It is recommended to set token to a random string
-such as "00000" to avoid accidentally using the real github api.
-
-## Custom tasks
-
-If desired, one can also register a custom GithubReleaseExtension task.
-
-```groovy
-tasks.register("task-name", dev.enginecrafter77.gitversion.GithubPublishReleaseTask.class) {
-	endpointUrl = "https://api.github.com" // required
-	repositoryUrl = "https://github.com/user/repo" // required
-	token = "xxxxxxxx" // required
-	release {
-		tag = "vX.Y.Z" // The tag to create the release on
-		name = "Release XYZ" // The release title
-		message = "Release message\n\nA new line example" // The release body
-		draft = false
-		preRelease = false
-	}
-	artifacts {
-		from jar with {
-			name = "artifact-name.jar"
-			label = "some label" // optional
-		}
-		from sourcesJar
-	}
-}
-```
+Additionally, to convert the `project.version` into a string provider, you can use `project.version.asString()`
+to create a lazy-evaluated string of the version.
